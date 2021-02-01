@@ -3,8 +3,10 @@ package com.nttdata.lumileds.otmm.assetready;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -30,6 +32,8 @@ public class AssetReadyNotifier implements AssetImportInterceptor{
 			StorageContext context, 
 			SecuritySession session) throws BaseTeamsException {
 
+		boolean priintFlag = false ;
+		
 		Map<String, String> productCodeMap = new HashMap<String, String>();		
 
 		SQLRepository sqlRepository = new SQLRepository();
@@ -92,6 +96,9 @@ public class AssetReadyNotifier implements AssetImportInterceptor{
 
 
 
+			// Check if the asset is from Priint
+			// Call the Hybris notifier only if its not a version
+			
 			if (
 					(
 							null != printFieldValue &&
@@ -107,52 +114,88 @@ public class AssetReadyNotifier implements AssetImportInterceptor{
 				log.debug("Print Field Value : " + printFieldValue.getStringValue());
 				log.debug("Product Code : " + productCode.getStringValue());
 
-				productCodeMap.put(assetID, productCode.getStringValue());
+				String parentFolderID ;
 
 				if ( asset.getName().contains(MetadataConstants.DRAFT)) {
 
-					ResultSet rs = sqlRepository.isDuplicate(
-							context.getJDBCConnection(), asset.getName());
+					parentFolderID = MetadataConstants.DRAFT_FOLDER_ID;
+				}
+				else if ( asset.getName().contains(MetadataConstants.PRS)) {
 
-					try {
-						
-						//Check if result set is containing more than one asset
-						if (rs.getFetchSize() > 1) {
+					parentFolderID = MetadataConstants.PRS_FOLDER_ID;
+				}
+				else if ( asset.getName().contains(MetadataConstants.CPIS)) {
 
-							log.debug("More than one asset found with "
-									+ "the same name: " + asset.getName());
+					parentFolderID = MetadataConstants.CPIS_FOLDER_ID;
+				}
+				else {
+					parentFolderID = MetadataConstants.PIS_FOLDER_ID;
+				}
 
-							
-							while (
-									rs.next() && 
-									
-									//Skip the current asset
-									rs.getString(1) != assetID
-									
-									) {
 
-								sqlRepository.insertPreviousDraftAssetID(
-										context.getJDBCConnection(),
-										rs.getString(1),
-										asset.getName());
-							}
 
-						}
-					} catch (SQLException sqlEx) {
+				ResultSet rs = sqlRepository.getVersions(
+						context.getJDBCConnection(), 
+						asset.getName(),
+						parentFolderID);
 
-						log.error("Exception while checking the size of "
-								+ "ResultSet for Duplicate Assets: {} ", sqlEx);
+				try {
+
+					Set<String> assetIDSet = new HashSet<>();
+
+					while ( rs.next()) {
+
+						assetIDSet.add(rs.getString(1));
+
 					}
 
+					log.debug("Asset ID count: " + assetIDSet.size());
+					
+					//Check if result set is containing more than one asset
+					if (assetIDSet.size() > 1) {
 
+						log.debug("More than one asset found with "
+								+ "the same name: "+ asset.getName());
+					}
+					else {
 
+						productCodeMap.put(assetID, productCode.getStringValue());
+						
+						priintFlag = true;
+						
+					}
+
+						//						for ( String dbAssetID : assetIDSet) {
+						//
+						//							if (
+						//									//Skip the current asset
+						//									dbAssetID != assetID
+						//									) {
+						//
+						//								sqlRepository.insertPreviousDraftAssetID(
+						//										context.getJDBCConnection(),
+						//										rs.getString(1),
+						//										asset.getName());
+						//							}
+						//
+						//						}
+					} catch (SQLException sqlEx) {
+
+					log.error("Exception while checking the size of "
+							+ "ResultSet for Version Assets: {} ", sqlEx);
 				}
-				HybrisRestClient hybrisRestClient = new HybrisRestClient();
-
-				hybrisRestClient.callHybrisNotifier(productCodeMap);
 
 
 			}
+		
+		
+		}
+	
+		if (priintFlag) {
+			HybrisRestClient hybrisRestClient = new HybrisRestClient();
+
+			hybrisRestClient.callHybrisNotifier(productCodeMap);
 		}
 	}
 }
+

@@ -66,33 +66,36 @@ public class SQLRepository {
 		
 	}
 
-	public ResultSet isDuplicate(Connection conn, String assetName) {
+	public ResultSet getVersions(Connection conn, 
+			String assetName,
+			String parentFolderID) {
 		
 		ResultSet rs = null;
 		
-		String duplicateAssets = "select " +
+		String versionAssets = "select " +
 				"		 a.uoi_id " +
 				"	from " + 
 				"		 uois a, " + 
 				"		 link_matrixes b " + 
 				"	where " + 
-				"		a.uoi_id = b.CHILD_ID and " + 
-				"		b.parent_id='" +
-						MetadataConstants.DRAFT_FOLDER_ID + "' and " + 
-				"		 a.name=?";
+				"		a.logical_uoi_id = b.CHILD_ID and " + 
+				"		b.parent_id=? and " + 
+				"		a.name=?";
 
-		PreparedStatement duplicateAssetsStatement;
+		PreparedStatement versionAssetsStatement;
 
 		try {
 
-			duplicateAssetsStatement = conn.prepareStatement(duplicateAssets);
+			versionAssetsStatement = conn.prepareStatement(versionAssets);
 
-			duplicateAssetsStatement.setString(1,assetName);
+			versionAssetsStatement.setString(1,parentFolderID);
+			
+			versionAssetsStatement.setString(2,assetName);
 
-			rs = duplicateAssetsStatement.executeQuery();
+			rs = versionAssetsStatement.executeQuery();
 
 		} catch (SQLException sqlEx) {
-			log.error("Exception while fetching assetPath: {} ", sqlEx);
+			log.error("Exception while fetching asset Versions: {} ", sqlEx);
 		}
 
 		return rs;
